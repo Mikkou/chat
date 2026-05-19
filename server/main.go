@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"html/template"
 	"log"
 	"net/http"
 	"sync"
@@ -77,7 +76,7 @@ func (c *Client) readLoop() {
 
 var hub = &Hub{}
 
-func echo(w http.ResponseWriter, r *http.Request) {
+func wsHandler(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	if name == "" {
 		http.Error(w, "name required", http.StatusBadRequest)
@@ -102,8 +101,13 @@ func echo(w http.ResponseWriter, r *http.Request) {
 	log.Printf("offline: %s", name)
 }
 
-func home(w http.ResponseWriter, r *http.Request) {
-	homeTemplate.Execute(w, "ws://"+r.Host+"/echo")
+func apiHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true}`))
 }
 
 func main() {
@@ -117,95 +121,7 @@ func main() {
 	defer db.Close()
 	log.Println("postgres: connected")
 
-	http.HandleFunc("/echo", echo)
-	http.HandleFunc("/", home)
+	http.HandleFunc("/ws", wsHandler)
+	http.HandleFunc("/api/health", apiHealth)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
-
-var homeTemplate = template.Must(template.New("").Parse(`
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<script>  
-window.addEventListener("load", function(evt) {
-
-    let output = document.getElementById("output");
-    let input = document.getElementById("input");
-    let name = document.getElementById("name");
-    let ws;
-
-    let print = function(message) {
-        let d = document.createElement("div");
-        d.textContent = message;
-        output.appendChild(d);
-        output.scroll(0, output.scrollHeight);
-    };
-
-    document.getElementById("open").onclick = function(evt) {
-        if (ws) {
-            return false;
-        }
-
-		if (!name.value) {
-			alert('name is required');
-			return false
-		}
-        ws = new WebSocket("{{.}}?name="+name.value);;
-        ws.onopen = function(evt) {
-            print("OPEN");
-        }
-        ws.onclose = function(evt) {
-            print("CLOSE");
-            ws = null;
-        }
-        ws.onmessage = function(evt) {
-            print(evt.data);
-        }
-        ws.onerror = function(evt) {
-            print("ERROR: " + evt.data);
-        }
-        return false;
-    };
-
-    document.getElementById("send").onclick = function(evt) {
-        if (!ws) {
-            return false;
-        }
-
-        print(name.value + ": " + input.value);
-        ws.send(input.value);
-        return false;
-    };
-
-    document.getElementById("close").onclick = function(evt) {
-        if (!ws) {
-            return false;
-        }
-        ws.close();
-        return false;
-    };
-
-});
-</script>
-</head>
-<body>
-<table>
-<tr><td valign="top" width="50%">
-<p>Click "Open" to create a connection to the server, 
-"Send" to send a message to the server and "Close" to close the connection. 
-You can change the message and send multiple times.
-<p>
-<form>
-<button id="open">Open</button>
-<button id="close">Close</button>
-<input id="name" type="text" placeholder="your name"></input>
-<p><input id="input" type="text" value="Hello world!">
-<button id="send">Send</button>
-</form>
-</td><td valign="top" width="50%">
-<div id="output" style="max-height: 70vh;overflow-y: scroll;"></div>
-</td></tr></table>
-</body>
-</html>
-`))

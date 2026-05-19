@@ -15,7 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const wsBaseURL = "ws://localhost:8080/echo"
+const wsBaseURL = "ws://localhost:8080/ws"
 
 type chatClient struct {
 	conn *websocket.Conn
@@ -162,7 +162,6 @@ func main() {
 		w.Close()
 	})
 
-	// Диалог после старта event loop (SetOnShown в Fyne нет)
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		fyne.Do(askName)
